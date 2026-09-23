@@ -1,7 +1,7 @@
 name: Release
 
-# Dispatched by the release script rather than triggered by a tag push, so the
-# tagged commit is guaranteed to be the one that was checked locally.
+# Dispatched by scripts/release.sh rather than triggered by a tag push, so the
+# tagged commit is guaranteed to be the one that was verified locally.
 on:
   workflow_dispatch:
     inputs:
@@ -14,26 +14,48 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Prebuilt NASM for aws-lc-sys, so the Windows runner does not need NASM on
+  # PATH. Harmless elsewhere.
+  AWS_LC_SYS_PREBUILT_NASM: "1"
+  # Pinned to an exact tarball: the zig release asset naming changed between
+  # 0.14 and 0.15, and the setup-zig action's mirror list 404s for 0.14.1.
+  ZIG_VERSION: 0.16.0
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    # Each target builds on its own OS. Cross-compiling to macOS or Windows from
+    # Linux is possible but needs the target's SDK, and a native runner is both
+    # simpler and free for a public repository.
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-musl
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
             name: linux-x86_64
-          - target: aarch64-unknown-linux-musl
+            zigbuild: true
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
             name: linux-aarch64
-          - target: armv7-unknown-linux-musleabihf
+            zigbuild: true
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
             name: linux-armv7
-          - target: x86_64-apple-darwin
-            name: darwin-x86_64
-          - target: aarch64-apple-darwin
+            zigbuild: true
+          - os: macos-latest
+            target: aarch64-apple-darwin
             name: darwin-aarch64
-          - target: x86_64-pc-windows-msvc
+            zigbuild: false
+          - os: macos-13
+            target: x86_64-apple-darwin
+            name: darwin-x86_64
+            zigbuild: false
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
             name: windows-x86_64
+            zigbuild: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,26 +66,30 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
 
-      # zig supplies the C toolchain aws-lc-sys needs when cross-compiling to
-      # musl targets that have no system compiler here.
+      # zig supplies the C toolchain aws-lc-sys needs for the musl targets,
+      # which have no system compiler on the runner.
       - name: Install zig
-        if: contains(matrix.target, 'musl')
-        uses: mlugg/setup-zig@v1
-        with:
-          version: 0.14.1
+        if: matrix.zigbuild
+        run: |
+          set -euo pipefail
+          url="https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz"
+          curl --fail --location --silent --show-error "$url" -o /tmp/zig.tar.xz
+          mkdir -p "$HOME/zig"
+          tar -xJf /tmp/zig.tar.xz -C "$HOME/zig" --strip-components=1
+          echo "$HOME/zig" >> "$GITHUB_PATH"
 
       - name: Install cargo-zigbuild
-        if: contains(matrix.target, 'musl')
+        if: matrix.zigbuild
         run: cargo install cargo-zigbuild --locked
 
       - name: Build
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ matrix.target }}" == *musl* ]]; then
-            # Fat LTO over an ARM/aarch64 link can take an unbounded amount of
-            # time; correctness of the artifact matters more here than the last
-            # few hundred kilobytes.
+          if [ "${{ matrix.zigbuild }}" = "true" ]; then
+            # Fat LTO over an ARM link can take an unbounded amount of time;
+            # a correct artifact matters more here than the last few hundred
+            # kilobytes.
             export CARGO_PROFILE_RELEASE_LTO=off
             export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
             cargo zigbuild --release --target "${{ matrix.target }}" \
@@ -88,6 +114,7 @@ jobs:
           cp README.md README_zh.md LICENSE CHANGELOG.md "dist/$out/"
           cp -r conf "dist/$out/"
           (cd dist && tar czf "$out.tar.gz" "$out")
+          rm -rf "dist/$out"
 
       - uses: actions/upload-artifact@v4
         with:
