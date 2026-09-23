@@ -1,15 +1,19 @@
 name: Release
 
+# Dispatched by the release script rather than triggered by a tag push, so the
+# tagged commit is guaranteed to be the one that was checked locally.
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and attach the artifacts to"
+        required: true
 
 permissions:
   contents: write
 
 env:
   CARGO_TERM_COLOR: always
-  AWS_LC_SYS_PREBUILT_NASM: "1"
 
 jobs:
   build:
@@ -32,47 +36,79 @@ jobs:
             name: windows-x86_64
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Prefer the dispatched tag; fall back to the ref for a manual run.
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install musl tools
+      # zig supplies the C toolchain aws-lc-sys needs when cross-compiling to
+      # musl targets that have no system compiler here.
+      - name: Install zig
         if: contains(matrix.target, 'musl')
-        run: sudo apt-get update && sudo apt-get install -y musl-tools gcc-arm-linux-gnueabihf
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.1
+
+      - name: Install cargo-zigbuild
+        if: contains(matrix.target, 'musl')
+        run: cargo install cargo-zigbuild --locked
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }} --bin tiny-frpc --bin tiny-frpc-ssh
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.target }}" == *musl* ]]; then
+            # Fat LTO over an ARM/aarch64 link can take an unbounded amount of
+            # time; correctness of the artifact matters more here than the last
+            # few hundred kilobytes.
+            export CARGO_PROFILE_RELEASE_LTO=off
+            export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
+            cargo zigbuild --release --target "${{ matrix.target }}" \
+              --bin tiny-frpc --bin tiny-frpc-ssh
+          else
+            cargo build --release --target "${{ matrix.target }}" \
+              --bin tiny-frpc --bin tiny-frpc-ssh
+          fi
 
       - name: Package
         shell: bash
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
+          tag="${{ github.event.inputs.tag }}"
+          version="${tag#v}"
           suffix=""
           [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ] && suffix=".exe"
           out="rust-tiny-frpc_${version}_${{ matrix.name }}"
           mkdir -p "dist/$out"
           cp "target/${{ matrix.target }}/release/tiny-frpc$suffix" "dist/$out/"
           cp "target/${{ matrix.target }}/release/tiny-frpc-ssh$suffix" "dist/$out/"
-          cp README.md README_zh.md LICENSE CHANGELOG.md -r conf "dist/$out/"
+          cp README.md README_zh.md LICENSE CHANGELOG.md "dist/$out/"
+          cp -r conf "dist/$out/"
           (cd dist && tar czf "$out.tar.gz" "$out")
-          (cd dist && if command -v zip >/dev/null; then zip -qr "$out.zip" "$out"; fi)
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: dist/*
+          path: dist/*.tar.gz
 
   publish:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # Only for CHANGELOG.md, which becomes the release body.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
-          generate_release_notes: true
+          tag_name: ${{ github.event.inputs.tag }}
+          name: ${{ github.event.inputs.tag }}
+          body_path: CHANGELOG.md
+          files: dist/*.tar.gz
