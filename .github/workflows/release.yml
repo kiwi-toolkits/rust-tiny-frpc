@@ -35,26 +35,36 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             name: linux-x86_64
+            extra_rustflags: ""
             zigbuild: true
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             name: linux-aarch64
+            extra_rustflags: ""
             zigbuild: true
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
             name: linux-armv7
+            extra_rustflags: ""
             zigbuild: true
+          # Both macOS targets build on the current runner arm64 image. There
+          # is no usable Intel macOS runner any more (macos-13 queues
+          # indefinitely), and `cc` on macOS cross-compiles to x86_64 with
+          # `-arch`, which is all aws-lc-sys needs.
           - os: macos-latest
             target: aarch64-apple-darwin
             name: darwin-aarch64
             zigbuild: false
-          - os: macos-13
+            extra_rustflags: ""
+          - os: macos-latest
             target: x86_64-apple-darwin
             name: darwin-x86_64
             zigbuild: false
+            extra_rustflags: "-C link-arg=-arch -C link-arg=x86_64"
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             name: windows-x86_64
+            extra_rustflags: ""
             zigbuild: false
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +94,10 @@ jobs:
 
       - name: Build
         shell: bash
+        env:
+          # Only the Intel macOS target sets this, to cross-compile from the
+          # arm64 runner.
+          RUSTFLAGS: ${{ matrix.extra_rustflags }}
         run: |
           set -euo pipefail
           if [ "${{ matrix.zigbuild }}" = "true" ]; then
