@@ -1,0 +1,5 @@
+[env]
+# aws-lc-sys (pulled in by russh's default rustls backend) needs NASM on
+# Windows; the crate ships a prebuilt object and this flag tells it to use
+# that instead of requiring a local NASM install. Harmless on other platforms.
+AWS_LC_SYS_PREBUILT_NASM = "1"

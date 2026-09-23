@@ -1,0 +1,55 @@
+[package]
+name = "rust-tiny-frpc"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "Apache-2.0"
+description = "A tiny frp client that drives the frps SSH tunnel gateway, with TOML and INI support"
+repository = "https://github.com/kiwi-toolkits/rust-tiny-frpc"
+readme = "README.md"
+keywords = ["frp", "ssh", "tunnel", "proxy", "nat"]
+categories = ["network-programming", "command-line-utilities"]
+
+[lib]
+name = "tiny_frpc"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tiny-frpc"
+path = "src/bin/tiny-frpc.rs"
+
+[[bin]]
+name = "tiny-frpc-ssh"
+path = "src/bin/tiny-frpc-ssh.rs"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+russh = "0.63.3"
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "io-util",
+    "time",
+    "signal",
+    "sync",
+    "process",
+] }
+toml = "0.8"
+
+# Size-oriented profile for the shipped binaries.
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Development profile: same shape, but fast to link and with unwinding so a
+# panic in a test still prints a backtrace.
+[profile.release-fast]
+inherits = "release"
+opt-level = 2
+lto = "thin"
+codegen-units = 16
+panic = "unwind"

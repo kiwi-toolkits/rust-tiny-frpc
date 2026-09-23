@@ -1,0 +1,16 @@
+# Integration fixture for tests/real_frps.rs.
+#
+# bindPort is the native frp protocol port (not used by this client, kept
+# because frps always opens it), while sshTunnelGateway.bindPort is the SSH
+# listener the client actually connects to.
+#
+# A token is configured so the tests exercise the same authentication path a
+# real deployment uses; frps rejects a client that omits it.
+
+bindPort = 27001
+
+auth.method = "token"
+auth.token = "rust-tiny-frpc-integration"
+
+[sshTunnelGateway]
+bindPort = 22220

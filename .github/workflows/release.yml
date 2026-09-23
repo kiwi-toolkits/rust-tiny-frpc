@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  AWS_LC_SYS_PREBUILT_NASM: "1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            name: linux-x86_64
+          - target: aarch64-unknown-linux-musl
+            name: linux-aarch64
+          - target: armv7-unknown-linux-musleabihf
+            name: linux-armv7
+          - target: x86_64-apple-darwin
+            name: darwin-x86_64
+          - target: aarch64-apple-darwin
+            name: darwin-aarch64
+          - target: x86_64-pc-windows-msvc
+            name: windows-x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install musl tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools gcc-arm-linux-gnueabihf
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }} --bin tiny-frpc --bin tiny-frpc-ssh
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          suffix=""
+          [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ] && suffix=".exe"
+          out="rust-tiny-frpc_${version}_${{ matrix.name }}"
+          mkdir -p "dist/$out"
+          cp "target/${{ matrix.target }}/release/tiny-frpc$suffix" "dist/$out/"
+          cp "target/${{ matrix.target }}/release/tiny-frpc-ssh$suffix" "dist/$out/"
+          cp README.md README_zh.md LICENSE CHANGELOG.md -r conf "dist/$out/"
+          (cd dist && tar czf "$out.tar.gz" "$out")
+          (cd dist && if command -v zip >/dev/null; then zip -qr "$out.zip" "$out"; fi)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

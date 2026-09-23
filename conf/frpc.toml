@@ -1,0 +1,23 @@
+# Minimal configuration.
+#
+# This file is picked up when no -c/--config is given, so it is read from the
+# current working directory.
+
+# A literal IPv6 address must be enclosed in square brackets when a port is
+# attached, as in "[::1]:80". For a bare serverAddr no brackets are needed.
+serverAddr = "127.0.0.1"
+
+# This must be the frps *ssh tunnel gateway* port
+# (sshTunnelGateway.bindPort), NOT the native protocol port (bindPort).
+# Pointing it at bindPort fails the SSH handshake.
+serverPort = 2200
+
+auth.method = "token"
+auth.token = "12345678"
+
+[[proxies]]
+name = "test-tcp"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 22
+remotePort = 6000

@@ -1,0 +1,133 @@
+# This file is a subset of https://github.com/fatedier/frp/blob/dev/conf/frpc_full_example.toml,
+# trimmed to the parameters the frps ssh tunnel gateway can actually express.
+# Anything that only works with a real frpc has been removed rather than
+# silently ignored.
+
+# This file is for reference only. Do not use it as-is.
+
+# ---- client ----
+
+# Shown by frps as the owner of the proxy. frps builds the wire-level proxy
+# name as "{user}.{proxy}" itself, so the client leaves the name alone.
+user = "your_name"
+
+# A literal IPv6 address must be enclosed in square brackets when a port is
+# attached, as in "[::1]:80" or "[ipv6-host]:http".
+serverAddr = "0.0.0.0"
+
+# This must be the frps *ssh tunnel gateway* port
+# (sshTunnelGateway.bindPort), NOT the native protocol port (bindPort).
+# See https://github.com/fatedier/frp#ssh-tunnel-gateway
+serverPort = 2200
+
+# auth.method is always "token"; frps accepts nothing else here.
+auth.method = "token"
+auth.token = "12345678"
+
+# Retry a proxy that frps rejects as a duplicate under a deterministic ex_N_
+# name instead of failing. Off by default because it changes the public proxy
+# name: a monitoring service that aggregates proxy names would see a new one.
+# rename = true
+
+# Send the per-proxy `metadatas` tables to frps.
+#
+# Off by default: `--metadatas` was added to frps in v0.61.2, and an older
+# gateway rejects the whole registration with `unknown flag: --metadatas`.
+# Turn this on only when the server is frps >= 0.61.2.
+# metadatasEnabled = true
+
+# Reproduce the pre-1.0 behaviour where the client also prefixed the proxy
+# name with "{user}.", on top of the prefix frps applies itself. That produced
+# names like "your_name.your_name.ssh". Leave this off unless you are matching
+# an existing deployment's proxy names.
+# userDoublePrefix = false
+
+# Private key used to authenticate to the ssh tunnel gateway.
+# Default: $HOME/.ssh/id_rsa (USERPROFILE is also consulted on Windows).
+# When no key is found the client connects without client authentication,
+# which the gateway accepts unless it configures authorizedKeysFile.
+# sshPrivateKey = "/home/user/.ssh/id_rsa"
+
+# Verify the gateway's host key against a known_hosts file. Off by default:
+# the client accepts any host key, matching the Go implementation, and warns.
+# sshKnownHosts = "/home/user/.ssh/known_hosts"
+
+# Upper bound on concurrently bridged forwarded connections. Over-limit
+# connections are dropped and logged rather than exhausting file descriptors.
+# maxForwardConnections = 512
+
+# Extra configuration files, relative to this file. Wildcards match like
+# filepath.Match. Included files must be toml.
+# includes = ["conf.d/*.toml"]
+
+# ---- proxies ----
+
+[[proxies]]
+# 'ssh' is the unique proxy name.
+name = "ssh"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 22
+# Remote port listened on by frps.
+remotePort = 6001
+
+# Resolve your domain names to [serverAddr] so you can use
+# http://web01.yourdomain.com to browse web01.
+[[proxies]]
+name = "web01"
+type = "http"
+localIP = "127.0.0.1"
+localPort = 80
+# HTTP basic auth for this proxy. Leave empty to serve without certification.
+httpUser = "admin"
+httpPassword = "admin"
+# With a frps subdomain host of frps.com this answers on web01.frps.com.
+subdomain = "web01"
+customDomains = ["web01.yourdomain.com"]
+# locations is only available for http type.
+locations = ["/", "/pic"]
+hostHeaderRewrite = "example.com"
+# Additional meta info for each proxy, passed to a server-side plugin.
+# Requires metadatasEnabled = true, and frps >= 0.61.2.
+# metadatas.var1 = "abc"
+# metadatas.var2 = "123"
+
+[[proxies]]
+name = "web02"
+type = "https"
+localIP = "127.0.0.1"
+localPort = 8000
+subdomain = "web02"
+customDomains = ["web02.yourdomain.com"]
+
+[[proxies]]
+name = "tcpmuxhttpconnect"
+type = "tcpmux"
+multiplexer = "httpconnect"
+localIP = "127.0.0.1"
+localPort = 10701
+customDomains = ["tunnel1"]
+
+[[proxies]]
+name = "secret_tcp"
+# With stcp, remotePort is unused. Whoever wants to connect the local port has
+# to run another client with an stcp visitor.
+type = "stcp"
+# secretKey authenticates visitors.
+secretKey = "abcdefg"
+localIP = "127.0.0.1"
+localPort = 22
+# If not empty, only visitors from the listed users may connect; '*' means all.
+allowUsers = ["*"]
+
+# ---- visitors ----
+# Parsed and validated, but reserved: the ssh tunnel gateway cannot register a
+# visitor, so these have no effect today. They exist so a config converted from
+# frpc.toml still loads.
+# [[visitors]]
+# name = "secret_tcp_visitor"
+# type = "stcp"
+# serverName = "secret_tcp"
+# secretKey = "abcdefg"
+# bindAddr = "127.0.0.1"
+# bindPort = 9000

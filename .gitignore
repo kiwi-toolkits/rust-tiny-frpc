@@ -1,0 +1,5 @@
+/target/
+/dist/
+*.log
+.idea/
+.autogen_ssh_key
