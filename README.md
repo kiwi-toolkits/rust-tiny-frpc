@@ -61,6 +61,18 @@ support — there is no way to tell why the child exited. Prefer `tiny-frpc`
 unless the device already ships OpenSSH and you want to avoid a second SSH
 stack.
 
+## Cross-compiling
+
+For ARMv7 boards there are build scripts and a static musl artifact:
+
+```bash
+./scripts/build-arm.sh          # Linux / macOS / WSL
+./scripts/build-arm.ps1         # Windows (PowerShell)
+```
+
+See [doc/build-linux-arm.md](doc/build-linux-arm.md) for the target triples and
+their requirements.
+
 ## Usage
 
 ```

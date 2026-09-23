@@ -3,3 +3,6 @@
 *.log
 .idea/
 .autogen_ssh_key
+# Vendored cross-compilation tools (zig, cargo-zigbuild); large binaries that
+# do not belong in the repository.
+/.tools/

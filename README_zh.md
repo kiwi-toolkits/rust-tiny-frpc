@@ -51,6 +51,17 @@ target/release/tiny-frpc-ssh   # 调用系统 ssh 命令
 
 `tiny-frpc-ssh` 需要 `PATH` 上有 `ssh`，并放弃重连与改名能力——因为无法从子进程退出状态判断原因。除非设备本身就带 OpenSSH 且你想省掉一份 SSH 实现，否则优先用 `tiny-frpc`。
 
+## 交叉编译
+
+面向 ARMv7 板子提供了构建脚本和静态 musl 产物：
+
+```bash
+./scripts/build-arm.sh          # Linux / macOS / WSL
+./scripts/build-arm.ps1         # Windows
+```
+
+目标三元组与前提条件见 [doc/build-linux-arm.md](doc/build-linux-arm.md)。
+
 ## 使用
 
 ```
